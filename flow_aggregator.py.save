@@ -1,0 +1,68 @@
+import json
+import sys
+from datetime import datetime
+
+# A flow is identified by the 5-tuple:
+# (src_ip, dst_ip, src_port, dst_port, protocol)
+flows = {}
+
+def get_flow_key(packet):
+    # Sort src/dst so A→B and B→A are the same flow
+    src = (packet["src_ip"], packet["src_port"])
+    dst = (packet["dst_ip"], packet["dst_port"])
+    proto = packet["protocol"]
+    if src > dst:
+        src, dst = dst, src
+    return (src[0], dst[0], src[1], dst[1], proto)
+
+def update_flow(key, packet):
+    if key not in flows:
+        flows[key] = {
+            "src_ip":       key[0],
+            "dst_ip":       key[1],
+            "src_port":     key[2],
+            "dst_port":     key[3],
+            "protocol":     key[4],
+            "service":      packet["service"],
+            "packet_count": 0,
+            "total_bytes":  0,
+            "syn_count":    0,
+            "ack_count":    0,
+            "fin_count":    0,
+            "rst_count":    0,
+            "psh_count":    0,
+            "start_time":   packet["timestamp"],
+            "last_time":    packet["timestamp"],
+        }
+
+    flow = flows[key]
+    flow["packet_count"] += 1
+    flow["total_bytes"]  += packet["length"]
+    flow["last_time"]     = packet["timestamp"]
+
+    flags = packet["flags"]
+    if flags["SYN"]: flow["syn_count"] += 1
+    if flags["ACK"]: flow["ack_count"] += 1
+    if flags["FIN"]: flow["fin_count"] += 1
+    if flags["RST"]: flow["rst_count"] += 1
+    if flags["PSH"]: flow["psh_count"] += 1
+
+def analyze_flow(flow):
+    duration = max(1, flow["last_time"] - flow["start_time"])
+    packet_count = flow["packet_count"]
+    total_bytes = flow["total_bytes"]
+
+    # Calculate features
+    packets_per_sec = packet_count / duration
+    avg_packet_size = total_bytes / packet_count
+    syn_ratio = flow["syn_count"] / packet_count
+    rst_ratio = flow["rst_count"] / packet_count
+
+    # Threat scoring
+    score = 0
+    reasons = []
+
+    # Too many SYNs = possible port scan
+    if syn_ratio > 0.7 and packet_count > 5:
+        score += 3
+        reasons.append("high SYN rat

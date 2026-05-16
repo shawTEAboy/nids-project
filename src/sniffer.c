@@ -32,7 +32,6 @@ void packet_handler(u_char *args, const struct pcap_pkthdr *header,
     long timestamp = (long)time(NULL);
     int length = ntohs(ip_header->ip_len);
 
-    /* TCP */
     if (ip_header->ip_p == 6) {
         struct tcphdr *tcp = (struct tcphdr *)(packet + 14 + ip_header_len);
         int src_port = ntohs(tcp->th_sport);
@@ -43,8 +42,6 @@ void packet_handler(u_char *args, const struct pcap_pkthdr *header,
         int fin = (tcp->th_flags & TH_FIN) ? 1 : 0;
         int rst = (tcp->th_flags & TH_RST) ? 1 : 0;
         int psh = (tcp->th_flags & TH_PUSH) ? 1 : 0;
-
-        /* Detect SYN only (no ACK) = possible port scan */
         int alert = (syn && !ack) ? 1 : 0;
 
         printf("{\"protocol\":\"TCP\","
@@ -63,12 +60,10 @@ void packet_handler(u_char *args, const struct pcap_pkthdr *header,
                fin?"true":"false",
                rst?"true":"false",
                psh?"true":"false",
-               length,
-               timestamp,
+               length, timestamp,
                alert?"true":"false");
     }
 
-    /* UDP */
     else if (ip_header->ip_p == 17) {
         struct udphdr *udp = (struct udphdr *)(packet + 14 + ip_header_len);
         int src_port = ntohs(udp->uh_sport);
@@ -85,11 +80,9 @@ void packet_handler(u_char *args, const struct pcap_pkthdr *header,
                src_ip, src_port,
                dst_ip, dst_port,
                get_service(dst_port),
-               length,
-               timestamp);
+               length, timestamp);
     }
 
-    /* ICMP */
     else if (ip_header->ip_p == 1) {
         printf("{\"protocol\":\"ICMP\","
                "\"src_ip\":\"%s\",\"src_port\":0,"
@@ -100,8 +93,7 @@ void packet_handler(u_char *args, const struct pcap_pkthdr *header,
                "\"timestamp\":%ld,"
                "\"alert\":false}\n",
                src_ip, dst_ip,
-               length,
-               timestamp);
+               length, timestamp);
     }
 }
 
@@ -128,10 +120,9 @@ int main(int argc, char *argv[]) {
     }
     pcap_setfilter(handle, &fp);
 
-    /* Capture 20 packets */
-    pcap_loop(handle, 20, packet_handler, NULL);
+    /* -1 means run forever until Ctrl+C */
+    pcap_loop(handle, -1, packet_handler, NULL);
 
     pcap_close(handle);
     return 0;
 }
-
