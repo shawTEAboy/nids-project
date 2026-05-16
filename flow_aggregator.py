@@ -1,6 +1,7 @@
 import json
 import sys
 from datetime import datetime
+from db_manager import init_db, save_packet, save_flow
 
 flows = {}
 
@@ -88,7 +89,7 @@ def analyze_flow(flow):
         "reasons": reasons
     }
 
-def print_summary():
+def print_and_save_summary():
     print("\n=== Flow Summary ===")
     print(f"Total flows: {len(flows)}\n")
 
@@ -100,8 +101,10 @@ def print_summary():
         feat = a["features"]
         score = a["threat_score"]
 
-        alert = "🚨 SUSPICIOUS" if score >= 3 else "✅ normal"
+        # Save every flow to database
+        save_flow(f, feat, score, a["reasons"])
 
+        alert = "🚨 SUSPICIOUS" if score >= 3 else "✅ normal"
         print(f"{alert} | score:{score} | "
               f"{f['protocol']} {f['src_ip']}:{f['src_port']} ↔ "
               f"{f['dst_ip']}:{f['dst_port']} ({f['service']})")
@@ -115,7 +118,12 @@ def print_summary():
             print(f"  ⚠️  Reasons: {', '.join(a['reasons'])}")
         print()
 
-print("=== NIDS Flow Aggregator ===")
+    print(f"✅ Saved {len(flows)} flows to database.")
+
+# Initialize database
+init_db()
+
+print("=== NIDS Flow Aggregator v2 ===")
 print("Reading packets...\n")
 
 try:
@@ -124,8 +132,12 @@ try:
         if not line:
             continue
         packet = json.loads(line)
+
+        # Save every packet to database
+        save_packet(packet)
+
         key = get_flow_key(packet)
         update_flow(key, packet)
 
 except KeyboardInterrupt:
-    print_summary()
+    print_and_save_summary()
